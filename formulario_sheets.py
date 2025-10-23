@@ -104,21 +104,18 @@ preguntas = [
     "¿Se evidencia un trabajo colaborativo entre distintas áreas y un impacto positivo en las personas o cultura organizacional?"
 ]
 
-# === ID ÚNICO MEJORADO (sin depender de IP) ===
-def get_stable_device_id():
-    """Genera un ID único que no depende de la IP y persiste en la sesión"""
-    if "stable_device_id" not in st.session_state:
+# === ID ÚNICO MEJORADO (sin mostrar al usuario) ===
+def get_session_device_id():
+    """Genera un ID único por sesión que persiste hasta cerrar la ventana"""
+    if "session_device_id" not in st.session_state:
         # Generar un UUID único para esta sesión
         session_uuid = str(uuid.uuid4())
         
-        # Combinar con timestamp para mayor unicidad, pero sin usar IP
-        timestamp_component = str(int(time.time() * 1000))[-8:]  # Últimos 8 dígitos del timestamp
-        
-        # Crear un ID estable usando solo información de sesión
-        stable_id = f"ses_{timestamp_component}_{session_uuid[:8]}"
-        st.session_state.stable_device_id = stable_id
+        # Crear un ID de sesión simple pero único
+        session_id = f"ses_{session_uuid[:12]}"
+        st.session_state.session_device_id = session_id
     
-    return st.session_state.stable_device_id
+    return st.session_state.session_device_id
 
 # Estado de la aplicación
 if "submitted" not in st.session_state:
@@ -126,8 +123,8 @@ if "submitted" not in st.session_state:
 if "processing" not in st.session_state:
     st.session_state.processing = False
 
-# Obtener device ID estable
-device_id = get_stable_device_id()
+# Obtener device ID de sesión (no se muestra al usuario)
+device_id = get_session_device_id()
 
 # Si ya enviado, mostrar agradecimiento
 if st.session_state.submitted:
