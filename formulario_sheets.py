@@ -32,7 +32,7 @@ st.title("🧠 Encuesta de Innovación - BEPENSA")
 scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["google_service_account"], scopes=scope)
 client = gspread.authorize(creds)
-sheet = client.open("Encuesta Innovación").sheet1
+sheet = client.open("Encuesta_innovacion").sheet1
 
 # Preguntas
 preguntas = [
@@ -60,3 +60,4 @@ if not st.session_state.submitted:
         st.success("🎉 ¡Gracias por tu respuesta!")
 else:
     st.success("🎉 ¡Gracias por tu respuesta!")
+
