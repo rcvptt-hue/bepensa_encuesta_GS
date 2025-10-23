@@ -4,7 +4,6 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import ssl
 import hashlib
-import time
 
 # === Config página / estilo ===
 st.set_page_config(page_title="Encuesta BEPENSA", layout="centered")
@@ -90,25 +89,8 @@ def get_device_id():
         device_id = hashlib.md5(device_string.encode()).hexdigest()
         return device_id
     except:
-        # Fallback: usar timestamp si no se puede obtener info del usuario
-        return f"fallback_{int(time.time())}"
-
-# === VERIFICAR SI YA VOTÓ ===
-def has_already_voted(device_id):
-    """Verifica si este dispositivo ya votó"""
-    try:
-        # Obtener todos los registros
-        records = sheet.get_all_records()
-        
-        # Buscar si este dispositivo ya votó
-        for record in records:
-            # Asumiendo que device_id está en la columna 7 (índice 6)
-            if len(record) >= 7 and record[6] == device_id:
-                return True
-        return False
-    except Exception as e:
-        st.error(f"Error verificando votos previos: {e}")
-        return False
+        # Fallback
+        return "unknown_device"
 
 # Estado de la aplicación
 if "submitted" not in st.session_state:
@@ -116,25 +98,17 @@ if "submitted" not in st.session_state:
 if "device_id" not in st.session_state:
     st.session_state.device_id = get_device_id()
 
-# Project ID fijo (puedes cambiarlo para cada proyecto diferente)
-PROJECT_ID = "proyecto_innovacion_2024"
-
-# Verificar si ya votó
-if has_already_voted(st.session_state.device_id):
-    st.error("⚠️ Ya has enviado una evaluación desde este dispositivo.")
-    st.info("Solo se permite una evaluación por dispositivo.")
-    st.stop()
-
-# Si ya enviado, mostrar agradecimiento
+# Si ya enviado, mostrar agradecimiento inmediatamente
 if st.session_state.submitted:
     st.success("🎉 ¡Gracias por tu respuesta!")
     st.info("Tu opinión es muy valiosa para el equipo.")
     st.stop()
 
-# Mostrar el formulario
+# Mostrar el formulario SIN clear_on_submit para mantener las respuestas
 st.markdown("Selecciona una calificación del **1 al 5** para cada pregunta:")
 
-with st.form("encuesta_form", clear_on_submit=True):
+# Usamos un formulario pero sin clear_on_submit para mantener las respuestas visibles
+with st.form("encuesta_form"):
     respuestas = []
     for i, q in enumerate(preguntas, start=1):
         r = st.radio(
@@ -146,7 +120,7 @@ with st.form("encuesta_form", clear_on_submit=True):
         )
         respuestas.append(r)
 
-    # Botón de enviar con estilo mejorado
+    # Botón de enviar
     submit_btn = st.form_submit_button(
         "Enviar respuesta ✅",
         use_container_width=True
@@ -154,29 +128,26 @@ with st.form("encuesta_form", clear_on_submit=True):
 
 # Procesar envío del formulario
 if submit_btn:
+    # Marcar como enviado INMEDIATAMENTE para mostrar agradecimiento rápido
+    st.session_state.submitted = True
+    
+    # Mostrar mensaje de agradecimiento inmediatamente
+    st.success("🎉 ¡Gracias por tu respuesta!")
+    st.info("Tu opinión es muy valiosa para el equipo.")
+    
+    # Luego, en segundo plano, guardar en Google Sheets
     with st.spinner("Guardando tu respuesta..."):
         try:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             device_id = st.session_state.device_id
             
-            # Guardar en Google Sheets: timestamp, respuestas, device_id, project_id
-            row_data = [timestamp] + respuestas + [device_id, PROJECT_ID]
+            # Guardar en Google Sheets: timestamp, respuestas, device_id
+            row_data = [timestamp] + respuestas + [device_id]
             sheet.append_row(row_data)
             
-            # Marcar como enviado
-            st.session_state.submitted = True
-            st.rerun()
-            
         except Exception as e:
-            st.error("❌ No se pudo guardar la respuesta. Por favor intenta de nuevo.")
-            st.write(f"Detalle técnico: {e}")
-
-# Información adicional
-st.markdown("---")
-with st.expander("ℹ️ Información importante"):
-    st.write("""
-    **Política de una evaluación por dispositivo:**
-    - Cada dispositivo solo puede enviar una evaluación
-    - Esto asegura la integridad y parcialidad del proceso
-    - Si necesitas evaluar desde otro dispositivo, puedes hacerlo
-    """)
+            # Si falla, mostramos error pero mantenemos el estado de enviado
+            st.error("❌ No se pudo guardar la respuesta, pero hemos registrado tu participación.")
+    
+    # Forzar rerun para asegurar que se muestre el estado final
+    st.rerun()
