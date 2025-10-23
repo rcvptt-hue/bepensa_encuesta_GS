@@ -61,9 +61,11 @@ if st.session_state.submitted:
     st.info("Tu opinión es muy valiosa para el equipo.")
     st.stop()
 
-# Si no enviado, mostrar el formulario (atomic submit)
-with st.form("encuesta_form", clear_on_submit=False):
-    st.markdown("Selecciona una calificación del **1 al 5** para cada pregunta:")
+# Si no enviado, mostrar el formulario
+st.markdown("Selecciona una calificación del **1 al 5** para cada pregunta:")
+
+# Usar un formulario con clear_on_submit=True para limpiar después del envío
+with st.form("encuesta_form", clear_on_submit=True):
     respuestas = []
     for i, q in enumerate(preguntas, start=1):
         # keys únicas
@@ -72,21 +74,15 @@ with st.form("encuesta_form", clear_on_submit=False):
 
     submit_btn = st.form_submit_button("Enviar respuesta ✅")
 
-# Cuando se pulsa el botón del form: marcar submitted INMEDIATAMENTE y luego intentar guardar
+# Cuando se pulsa el botón del form
 if submit_btn:
-    # marcar para que en el siguiente render (inmediato) se oculte el formulario
-    st.session_state.submitted = True
-
-    # Mostrar spinner mientras se guarda; si falla, revertimos el estado y mostramos error
     with st.spinner("Guardando tu respuesta..."):
         try:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            # append_row es la llamada a la API; puede tardar
             sheet.append_row([timestamp] + respuestas)
-            # éxito: el mensaje de agradecimiento se mostrará (estado ya True)
-            st.success("🎉 ¡Gracias por tu respuesta!")
+            # Marcar como enviado solo si fue exitoso
+            st.session_state.submitted = True
+            st.rerun()  # Forzar rerun para actualizar la interfaz inmediatamente
         except Exception as e:
-            # revertir estado para permitir reintento
-            st.session_state.submitted = False
             st.error("No se pudo guardar la respuesta. Por favor intenta de nuevo.")
             st.write(f"Detalle técnico: {e}")
