@@ -60,10 +60,11 @@ st.markdown(
     
     .loading-message {
         background-color: #E65100;
-        padding: 20px;
+        padding: 15px;
         border-radius: 10px;
         text-align: center;
-        margin: 20px 0;
+        margin: 15px 0;
+        border-left: 5px solid #FF9800;
     }
     </style>
     """, unsafe_allow_html=True
@@ -122,8 +123,8 @@ def get_stable_device_id():
 # Estado de la aplicación
 if "submitted" not in st.session_state:
     st.session_state.submitted = False
-if "show_loading" not in st.session_state:
-    st.session_state.show_loading = False
+if "processing" not in st.session_state:
+    st.session_state.processing = False
 
 # Obtener device ID estable
 device_id = get_stable_device_id()
@@ -147,23 +148,7 @@ if st.session_state.submitted:
     
     st.stop()
 
-# Si está en estado de carga, mostrar mensaje de espera
-if st.session_state.show_loading:
-    st.markdown(
-        """
-        <div class="loading-message">
-        <h3>⏳ Espera unos momentos</h3>
-        <p>Estamos procesando tu respuesta...</p>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
-    
-    # Forzar un rerun después de un breve momento para continuar con el procesamiento
-    time.sleep(0.5)
-    st.rerun()
-
-# Mostrar el formulario normal
+# Mostrar el formulario
 st.markdown("Selecciona una calificación del **1 al 5** para cada pregunta:")
 
 # Formulario sin clear_on_submit para mantener las respuestas visibles
@@ -184,18 +169,29 @@ with st.form("encuesta_form"):
         use_container_width=True
     )
 
+# Si se está procesando, mostrar mensaje de espera
+if st.session_state.processing:
+    st.markdown(
+        """
+        <div class="loading-message">
+        <h3>⏳ Espera unos momentos</h3>
+        <p>Estamos procesando tu respuesta...</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
 # Procesar envío del formulario
-if submit_btn:
-    # PRIMERO: Mostrar estado de carga inmediatamente
-    st.session_state.show_loading = True
-    st.session_state.form_responses = respuestas  # Guardar respuestas para usarlas después
+if submit_btn and not st.session_state.processing:
+    # Marcar que estamos procesando
+    st.session_state.processing = True
+    st.session_state.form_responses = respuestas
+    
+    # Forzar rerun para mostrar el mensaje de espera inmediatamente
     st.rerun()
 
-# Este código se ejecuta después del rerun del estado de carga
-if st.session_state.get('show_loading', False) and not st.session_state.get('submitted', False):
-    # Ocultar el estado de carga y procesar el envío
-    st.session_state.show_loading = False
-    
+# Este código se ejecuta después del rerun, cuando processing es True
+if st.session_state.get('processing', False) and not st.session_state.get('submitted', False):
     # Recuperar las respuestas guardadas
     respuestas = st.session_state.form_responses
     
@@ -208,9 +204,15 @@ if st.session_state.get('show_loading', False) and not st.session_state.get('sub
             row_data = [timestamp] + respuestas + [device_id]
             sheet.append_row(row_data)
             
+            # Mensaje de éxito
+            st.success("✅ Respuesta guardada exitosamente")
+            
         except Exception as e:
             st.error("❌ No se pudo guardar la respuesta en el sistema.")
     
-    # FINALMENTE: Marcar como enviado
+    # Marcar como enviado
     st.session_state.submitted = True
+    st.session_state.processing = False
+    
+    # Forzar rerun final para mostrar pantalla de agradecimiento
     st.rerun()
