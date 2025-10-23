@@ -3,6 +3,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import ssl
+import hashlib
+import time
 
 # === Config página / estilo ===
 st.set_page_config(page_title="Encuesta BEPENSA", layout="centered")
@@ -12,14 +14,38 @@ st.markdown(
     body {background-color: black; color: white;}
     .stApp {background-color: black;}
     h1, h2, h3, label, p, div, span {color: white !important;}
-    .stButton > button {background-color:#E63946;color:white;font-weight:bold;border-radius:10px;}
+    
+    /* Estilo específico para el botón de enviar */
+    .stButton > button {
+        background-color: #E63946 !important;
+        color: white !important;
+        font-weight: bold !important;
+        border-radius: 10px !important;
+        border: none !important;
+        padding: 10px 24px !important;
+        font-size: 16px !important;
+    }
+    
+    /* Estilo cuando el botón está en hover */
+    .stButton > button:hover {
+        background-color: #D32F2F !important;
+        color: white !important;
+    }
+    
+    /* Estilo para los radio buttons */
+    .stRadio > div {
+        background-color: #1E1E1E;
+        padding: 10px;
+        border-radius: 8px;
+        margin: 10px 0;
+    }
     </style>
     """, unsafe_allow_html=True
 )
 
 # Logo (opcional)
 try:
-    st.image("logo.png", width=350)
+    st.image("logo.png", width=120)
 except:
     pass
 
@@ -28,7 +54,7 @@ st.title("🧠 Encuesta de Innovación - BEPENSA")
 # SSL BYPASS (solo si tu red lo requiere)
 ssl._create_default_https_context = ssl._create_unverified_context
 
-# Conexión a Google Sheets (st.secrets debe contener google_service_account)
+# Conexión a Google Sheets
 scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
 SHEET_NAME = "Encuesta_innovacion"
 WORKSHEET_NAME = "Hoja 1"
@@ -51,9 +77,66 @@ preguntas = [
     "¿Se evidencia un trabajo colaborativo entre distintas áreas y un impacto positivo en las personas o cultura organizacional?"
 ]
 
-# Estado para controlar envío único por sesión
+# === FUNCIÓN PARA GENERAR ID ÚNICO DEL DISPOSITIVO ===
+def get_device_id():
+    """Genera un ID único basado en la IP del usuario y user agent"""
+    try:
+        # Obtener información del usuario
+        user_ip = st.experimental_user.ip if hasattr(st.experimental_user, 'ip') else "unknown_ip"
+        user_agent = st.experimental_user.user_agent if hasattr(st.experimental_user, 'user_agent') else "unknown_agent"
+        
+        # Combinar y crear hash
+        device_string = f"{user_ip}_{user_agent}"
+        device_id = hashlib.md5(device_string.encode()).hexdigest()
+        return device_id
+    except:
+        # Fallback: usar timestamp si no se puede obtener info del usuario
+        return f"fallback_{int(time.time())}"
+
+# === VERIFICAR SI YA VOTÓ ===
+def has_already_voted(device_id, project_id=None):
+    """Verifica si este dispositivo ya votó para este proyecto"""
+    try:
+        # Obtener todos los registros
+        records = sheet.get_all_records()
+        
+        # Buscar si este dispositivo ya votó
+        for record in records:
+            # Asumiendo que la columna 7 es device_id y columna 8 es project_id
+            if len(record) >= 8:
+                if record[6] == device_id and (project_id is None or record[7] == project_id):
+                    return True
+        return False
+    except Exception as e:
+        st.error(f"Error verificando votos previos: {e}")
+        return False
+
+# Estado de la aplicación
 if "submitted" not in st.session_state:
     st.session_state.submitted = False
+if "device_id" not in st.session_state:
+    st.session_state.device_id = get_device_id()
+
+# === SELECTOR DE PROYECTO ===
+st.subheader("Selecciona el proyecto a evaluar")
+proyectos = [
+    "Proyecto A - Sistema de Gestión Inteligente",
+    "Proyecto B - Plataforma Digital Clientes", 
+    "Proyecto C - Optimización Logística",
+    "Proyecto D - Sustentabilidad y Medio Ambiente",
+    "Proyecto E - Innovación en Experiencia Cliente"
+]
+
+proyecto_seleccionado = st.selectbox("Proyecto:", proyectos, key="proyecto")
+
+# Obtener ID único del proyecto
+project_id = proyectos.index(proyecto_seleccionado)
+
+# Verificar si ya votó para este proyecto
+if has_already_voted(st.session_state.device_id, project_id):
+    st.error("⚠️ Ya has enviado una evaluación para este proyecto desde este dispositivo.")
+    st.info("Solo se permite una evaluación por proyecto por dispositivo.")
+    st.stop()
 
 # Si ya enviado, mostrar agradecimiento
 if st.session_state.submitted:
@@ -61,29 +144,52 @@ if st.session_state.submitted:
     st.info("Tu opinión es muy valiosa para el equipo.")
     st.stop()
 
-# Si no enviado, mostrar el formulario
+# Mostrar el formulario
 st.markdown("Selecciona una calificación del **1 al 5** para cada pregunta:")
 
-# Usar un formulario con clear_on_submit=True para limpiar después del envío
 with st.form("encuesta_form", clear_on_submit=True):
     respuestas = []
     for i, q in enumerate(preguntas, start=1):
-        # keys únicas
-        r = st.radio(f"{i}. {q}", options=[1,2,3,4,5], index=2, horizontal=True, key=f"radio_{i}")
+        r = st.radio(
+            f"{i}. {q}", 
+            options=[1, 2, 3, 4, 5], 
+            index=2, 
+            horizontal=True, 
+            key=f"radio_{i}"
+        )
         respuestas.append(r)
 
-    submit_btn = st.form_submit_button("Enviar respuesta ✅")
+    # Botón de enviar con estilo mejorado
+    submit_btn = st.form_submit_button(
+        "Enviar respuesta ✅",
+        use_container_width=True
+    )
 
-# Cuando se pulsa el botón del form
+# Procesar envío del formulario
 if submit_btn:
     with st.spinner("Guardando tu respuesta..."):
         try:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            sheet.append_row([timestamp] + respuestas)
-            # Marcar como enviado solo si fue exitoso
+            device_id = st.session_state.device_id
+            
+            # Guardar en Google Sheets: timestamp, respuestas, device_id, project_id
+            row_data = [timestamp] + respuestas + [device_id, project_id, proyecto_seleccionado]
+            sheet.append_row(row_data)
+            
+            # Marcar como enviado
             st.session_state.submitted = True
-            st.rerun()  # Forzar rerun para actualizar la interfaz inmediatamente
+            st.rerun()
+            
         except Exception as e:
-            st.error("No se pudo guardar la respuesta. Por favor intenta de nuevo.")
+            st.error("❌ No se pudo guardar la respuesta. Por favor intenta de nuevo.")
             st.write(f"Detalle técnico: {e}")
 
+# Información adicional
+st.markdown("---")
+with st.expander("ℹ️ Información importante"):
+    st.write("""
+    **Política de una evaluación por dispositivo:**
+    - Cada dispositivo solo puede enviar una evaluación por proyecto
+    - Esto asegura la integridad y公平idad del proceso
+    - Si necesitas evaluar múltiples proyectos, puedes hacerlo desde el mismo dispositivo
+    """)
