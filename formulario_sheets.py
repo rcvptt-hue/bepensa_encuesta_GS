@@ -4,6 +4,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import ssl
 import hashlib
+import uuid
 
 # === Config página / estilo ===
 st.set_page_config(page_title="Encuesta BEPENSA", layout="centered")
@@ -14,7 +15,6 @@ st.markdown(
     .stApp {background-color: black;}
     h1, h2, h3, label, p, div, span {color: white !important;}
     
-    /* Estilo específico para el botón de enviar */
     .stButton > button {
         background-color: #E63946 !important;
         color: white !important;
@@ -25,13 +25,11 @@ st.markdown(
         font-size: 16px !important;
     }
     
-    /* Estilo cuando el botón está en hover */
     .stButton > button:hover {
         background-color: #D32F2F !important;
         color: white !important;
     }
     
-    /* Estilo para los radio buttons */
     .stRadio > div {
         background-color: #1E1E1E;
         padding: 10px;
@@ -44,13 +42,13 @@ st.markdown(
 
 # Logo (opcional)
 try:
-    st.image("logo.png", width=120)
+    st.image("logo.png", width=350)
 except:
     pass
 
 st.title("🧠 Encuesta de Innovación - BEPENSA")
 
-# SSL BYPASS (solo si tu red lo requiere)
+# SSL BYPASS
 ssl._create_default_https_context = ssl._create_unverified_context
 
 # Conexión a Google Sheets
@@ -76,27 +74,50 @@ preguntas = [
     "¿Se evidencia un trabajo colaborativo entre distintas áreas y un impacto positivo en las personas o cultura organizacional?"
 ]
 
-# === FUNCIÓN PARA GENERAR ID ÚNICO DEL DISPOSITIVO ===
-def get_device_id():
-    """Genera un ID único basado en la IP del usuario y user agent"""
+# === ALTERNATIVAS PARA GENERAR DEVICE ID ===
+
+def get_device_id_cookie():
+    """Genera un ID único usando cookies del navegador"""
+    if "device_id" not in st.session_state:
+        # Intentar recuperar de cookies usando un método alternativo
+        try:
+            # Usamos el user agent + timestamp como fallback
+            user_agent = st.experimental_user.user_agent if hasattr(st.experimental_user, 'user_agent') else "unknown"
+            unique_string = f"{user_agent}_{datetime.now().timestamp()}"
+            device_id = hashlib.md5(unique_string.encode()).hexdigest()
+            st.session_state.device_id = device_id
+        except:
+            # Último recurso: UUID aleatorio
+            st.session_state.device_id = str(uuid.uuid4())
+    
+    return st.session_state.device_id
+
+def get_device_id_fingerprint():
+    """Genera un ID basado en múltiples factores del navegador"""
     try:
-        # Obtener información del usuario
-        user_ip = st.experimental_user.ip if hasattr(st.experimental_user, 'ip') else "unknown_ip"
-        user_agent = st.experimental_user.user_agent if hasattr(st.experimental_user, 'user_agent') else "unknown_agent"
+        # Combinar múltiples fuentes para crear una huella digital
+        user_agent = st.experimental_user.user_agent if hasattr(st.experimental_user, 'user_agent') else "unknown"
+        # Agregar información de timezone y otros datos disponibles
+        timestamp = str(datetime.now().timestamp())
         
-        # Combinar y crear hash
-        device_string = f"{user_ip}_{user_agent}"
-        device_id = hashlib.md5(device_string.encode()).hexdigest()
+        fingerprint_string = f"{user_agent}_{timestamp}"
+        device_id = hashlib.sha256(fingerprint_string.encode()).hexdigest()
         return device_id
     except:
-        # Fallback
-        return "unknown_device"
+        return str(uuid.uuid4())
+
+def get_device_id_simple():
+    """Método más simple usando solo UUID"""
+    if "device_id" not in st.session_state:
+        st.session_state.device_id = str(uuid.uuid4())
+    return st.session_state.device_id
 
 # Estado de la aplicación
 if "submitted" not in st.session_state:
     st.session_state.submitted = False
-if "device_id" not in st.session_state:
-    st.session_state.device_id = get_device_id()
+
+# Usar el método simple (recomendado)
+device_id = get_device_id_simple()
 
 # Si ya enviado, mostrar agradecimiento inmediatamente
 if st.session_state.submitted:
@@ -104,10 +125,10 @@ if st.session_state.submitted:
     st.info("Tu opinión es muy valiosa para el equipo.")
     st.stop()
 
-# Mostrar el formulario SIN clear_on_submit para mantener las respuestas
+# Mostrar el formulario
 st.markdown("Selecciona una calificación del **1 al 5** para cada pregunta:")
 
-# Usamos un formulario pero sin clear_on_submit para mantener las respuestas visibles
+# Formulario sin clear_on_submit
 with st.form("encuesta_form"):
     respuestas = []
     for i, q in enumerate(preguntas, start=1):
@@ -120,7 +141,6 @@ with st.form("encuesta_form"):
         )
         respuestas.append(r)
 
-    # Botón de enviar
     submit_btn = st.form_submit_button(
         "Enviar respuesta ✅",
         use_container_width=True
@@ -128,26 +148,26 @@ with st.form("encuesta_form"):
 
 # Procesar envío del formulario
 if submit_btn:
-    # Marcar como enviado INMEDIATAMENTE para mostrar agradecimiento rápido
+    # Marcar como enviado INMEDIATAMENTE
     st.session_state.submitted = True
     
     # Mostrar mensaje de agradecimiento inmediatamente
     st.success("🎉 ¡Gracias por tu respuesta!")
     st.info("Tu opinión es muy valiosa para el equipo.")
     
-    # Luego, en segundo plano, guardar en Google Sheets
+    # Guardar en Google Sheets en segundo plano
     with st.spinner("Guardando tu respuesta..."):
         try:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            device_id = st.session_state.device_id
             
             # Guardar en Google Sheets: timestamp, respuestas, device_id
             row_data = [timestamp] + respuestas + [device_id]
             sheet.append_row(row_data)
             
         except Exception as e:
-            # Si falla, mostramos error pero mantenemos el estado de enviado
             st.error("❌ No se pudo guardar la respuesta, pero hemos registrado tu participación.")
     
-    # Forzar rerun para asegurar que se muestre el estado final
+    # Pequeña pausa para que el usuario vea el mensaje antes del rerun
+    import time
+    time.sleep(1)
     st.rerun()
