@@ -6,7 +6,7 @@ import ssl
 import hashlib
 import time
 from zoneinfo import ZoneInfo
-import random
+import uuid
 
 # === Config página / estilo ===
 st.set_page_config(page_title="Encuesta BEPENSA", layout="centered")
@@ -57,6 +57,14 @@ st.markdown(
         font-size: 18px;
         margin-bottom: 5px;
     }
+    
+    .loading-message {
+        background-color: #E65100;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        margin: 20px 0;
+    }
     </style>
     """, unsafe_allow_html=True
 )
@@ -95,39 +103,37 @@ preguntas = [
     "¿Se evidencia un trabajo colaborativo entre distintas áreas y un impacto positivo en las personas o cultura organizacional?"
 ]
 
-# === ID ÚNICO PERSISTENTE (no cambia con refresh) ===
-def get_persistent_device_id():
-    """Genera un ID único que persiste incluso después de refresh"""
-    if "persistent_device_id" not in st.session_state:
-        try:
-            # Usar información más estable para el ID base
-            user_agent = st.experimental_user.user_agent if hasattr(st.experimental_user, 'user_agent') else ""
-            
-            # Crear una semilla más estable (sin componentes que cambien con cada refresh)
-            seed = f"{user_agent}"
-            device_id = hashlib.sha256(seed.encode()).hexdigest()[:16]
-            
-            st.session_state.persistent_device_id = f"dev_{device_id}"
-            
-        except Exception as e:
-            # Fallback estable
-            st.session_state.persistent_device_id = f"dev_fallback_{int(time.time())}"
+# === ID ÚNICO MEJORADO (sin depender de IP) ===
+def get_stable_device_id():
+    """Genera un ID único que no depende de la IP y persiste en la sesión"""
+    if "stable_device_id" not in st.session_state:
+        # Generar un UUID único para esta sesión
+        session_uuid = str(uuid.uuid4())
+        
+        # Combinar con timestamp para mayor unicidad, pero sin usar IP
+        timestamp_component = str(int(time.time() * 1000))[-8:]  # Últimos 8 dígitos del timestamp
+        
+        # Crear un ID estable usando solo información de sesión
+        stable_id = f"ses_{timestamp_component}_{session_uuid[:8]}"
+        st.session_state.stable_device_id = stable_id
     
-    return st.session_state.persistent_device_id
+    return st.session_state.stable_device_id
 
 # Estado de la aplicación
 if "submitted" not in st.session_state:
     st.session_state.submitted = False
+if "show_loading" not in st.session_state:
+    st.session_state.show_loading = False
 
-# Obtener device ID persistente
-device_id = get_persistent_device_id()
+# Obtener device ID estable
+device_id = get_stable_device_id()
 
-# Si ya enviado, mostrar agradecimiento y mensaje de cierre
+# Si ya enviado, mostrar agradecimiento
 if st.session_state.submitted:
     st.success("🎉 ¡Gracias por tu respuesta!")
     st.info("Tu opinión es muy valiosa para el equipo.")
     
-    # Mensaje mejorado para cerrar manualmente con más énfasis
+    # Mensaje para cerrar manualmente
     st.markdown(
         """
         <div class="close-message">
@@ -141,7 +147,23 @@ if st.session_state.submitted:
     
     st.stop()
 
-# Mostrar el formulario
+# Si está en estado de carga, mostrar mensaje de espera
+if st.session_state.show_loading:
+    st.markdown(
+        """
+        <div class="loading-message">
+        <h3>⏳ Espera unos momentos</h3>
+        <p>Estamos procesando tu respuesta...</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    
+    # Forzar un rerun después de un breve momento para continuar con el procesamiento
+    time.sleep(0.5)
+    st.rerun()
+
+# Mostrar el formulario normal
 st.markdown("Selecciona una calificación del **1 al 5** para cada pregunta:")
 
 # Formulario sin clear_on_submit para mantener las respuestas visibles
@@ -164,14 +186,20 @@ with st.form("encuesta_form"):
 
 # Procesar envío del formulario
 if submit_btn:
-    # Marcar como enviado INMEDIATAMENTE
-    st.session_state.submitted = True
+    # PRIMERO: Mostrar estado de carga inmediatamente
+    st.session_state.show_loading = True
+    st.session_state.form_responses = respuestas  # Guardar respuestas para usarlas después
+    st.rerun()
+
+# Este código se ejecuta después del rerun del estado de carga
+if st.session_state.get('show_loading', False) and not st.session_state.get('submitted', False):
+    # Ocultar el estado de carga y procesar el envío
+    st.session_state.show_loading = False
     
-    # Mostrar mensaje de agradecimiento inmediatamente
-    st.success("🎉 ¡Gracias por tu respuesta!")
-    st.info("Tu opinión es muy valiosa para el equipo.")
+    # Recuperar las respuestas guardadas
+    respuestas = st.session_state.form_responses
     
-    # Guardar en Google Sheets en segundo plano
+    # Guardar en Google Sheets
     with st.spinner("Guardando tu respuesta..."):
         try:
             timestamp = datetime.now(ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d %H:%M:%S")
@@ -180,23 +208,9 @@ if submit_btn:
             row_data = [timestamp] + respuestas + [device_id]
             sheet.append_row(row_data)
             
-            # Mensaje de éxito
-            st.success("✅ Respuesta guardada exitosamente")
-            
         except Exception as e:
-            st.error("❌ No se pudo guardar la respuesta en el sistema, pero hemos registrado tu participación.")
+            st.error("❌ No se pudo guardar la respuesta en el sistema.")
     
-    # Mensaje mejorado para cerrar manualmente con más énfasis
-    st.markdown(
-        """
-        <div class="close-message">
-        <h3>🏁 ENCUESTA COMPLETADA</h3>
-        <p><strong>Por favor, cierra esta ventana/pestaña de tu navegador</strong></p>
-        <p>¡Gracias por tu participación!</p>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
-    
-    # Forzar rerun para asegurar que se muestre el estado final
+    # FINALMENTE: Marcar como enviado
+    st.session_state.submitted = True
     st.rerun()
