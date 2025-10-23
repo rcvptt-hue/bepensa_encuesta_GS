@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Oct 23 13:04:07 2025
-
-@author: rccorreall
-"""
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -25,7 +19,7 @@ st.markdown(
 
 # Logo (opcional)
 try:
-    st.image("logo.png", width=350)
+    st.image("logo.png", width=140)
 except:
     pass
 
@@ -82,7 +76,3 @@ if not st.session_state.submitted:
 if st.session_state.submitted:
     st.success("🎉 ¡Gracias por tu respuesta!")
     st.info("Tu opinión es muy valiosa para el equipo.")
-
-
-
-
