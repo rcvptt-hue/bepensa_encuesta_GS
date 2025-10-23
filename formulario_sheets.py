@@ -19,7 +19,7 @@ st.markdown(
 
 # Logo (opcional)
 try:
-    st.image("logo.png", width=120)
+    st.image("logo.png", width=350)
 except:
     pass
 
@@ -86,3 +86,4 @@ if submit_btn:
         except Exception as e:
             st.error("No se pudo guardar la respuesta. Por favor intenta de nuevo.")
             st.write(f"Detalle técnico: {e}")
+
