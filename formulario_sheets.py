@@ -4,7 +4,8 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import ssl
 import hashlib
-import uuid
+import time
+from zoneinfo import ZoneInfo
 
 # === Config página / estilo ===
 st.set_page_config(page_title="Encuesta BEPENSA", layout="centered")
@@ -74,61 +75,63 @@ preguntas = [
     "¿Se evidencia un trabajo colaborativo entre distintas áreas y un impacto positivo en las personas o cultura organizacional?"
 ]
 
-# === ALTERNATIVAS PARA GENERAR DEVICE ID ===
-
-def get_device_id_cookie():
-    """Genera un ID único usando cookies del navegador"""
-    if "device_id" not in st.session_state:
-        # Intentar recuperar de cookies usando un método alternativo
+# === ID ÚNICO PERSISTENTE (sobrevive a refresh) ===
+def get_persistent_device_id():
+    """Genera un ID único que persiste incluso después de refresh"""
+    if "persistent_device_id" not in st.session_state:
+        # Intentar crear un ID único y persistente
         try:
-            # Usamos el user agent + timestamp como fallback
-            user_agent = st.experimental_user.user_agent if hasattr(st.experimental_user, 'user_agent') else "unknown"
-            unique_string = f"{user_agent}_{datetime.now().timestamp()}"
-            device_id = hashlib.md5(unique_string.encode()).hexdigest()
-            st.session_state.device_id = device_id
+            # Usar una combinación de información disponible + timestamp
+            user_agent = st.experimental_user.user_agent if hasattr(st.experimental_user, 'user_agent') else ""
+            ip = st.experimental_user.ip if hasattr(st.experimental_user, 'ip') else ""
+            
+            # Crear una semilla única
+            seed = f"{user_agent}_{ip}_{int(time.time() / 3600)}"  # Cambia cada hora para evitar conflicts
+            device_id = hashlib.md5(seed.encode()).hexdigest()[:12]
+            
+            st.session_state.persistent_device_id = f"device_{device_id}"
         except:
-            # Último recurso: UUID aleatorio
-            st.session_state.device_id = str(uuid.uuid4())
+            # Fallback más simple
+            st.session_state.persistent_device_id = f"device_{int(time.time())}"
     
-    return st.session_state.device_id
+    return st.session_state.persistent_device_id
 
-def get_device_id_fingerprint():
-    """Genera un ID basado en múltiples factores del navegador"""
-    try:
-        # Combinar múltiples fuentes para crear una huella digital
-        user_agent = st.experimental_user.user_agent if hasattr(st.experimental_user, 'user_agent') else "unknown"
-        # Agregar información de timezone y otros datos disponibles
-        timestamp = str(datetime.now().timestamp())
-        
-        fingerprint_string = f"{user_agent}_{timestamp}"
-        device_id = hashlib.sha256(fingerprint_string.encode()).hexdigest()
-        return device_id
-    except:
-        return str(uuid.uuid4())
-
-def get_device_id_simple():
-    """Método más simple usando solo UUID"""
-    if "device_id" not in st.session_state:
-        st.session_state.device_id = str(uuid.uuid4())
-    return st.session_state.device_id
+# === JAVASCRIPT PARA CERRAR VENTANA ===
+def close_window_script():
+    """Inyecta JavaScript para cerrar la ventana después de 5 segundos"""
+    return """
+    <script>
+    setTimeout(function() {
+        window.open('', '_self', '');
+        window.close();
+    }, 5000);
+    </script>
+    """
 
 # Estado de la aplicación
 if "submitted" not in st.session_state:
     st.session_state.submitted = False
 
-# Usar el método simple (recomendado)
-device_id = get_device_id_simple()
+# Obtener device ID persistente
+device_id = get_persistent_device_id()
 
-# Si ya enviado, mostrar agradecimiento inmediatamente
+# Si ya enviado, mostrar agradecimiento y programar cierre
 if st.session_state.submitted:
     st.success("🎉 ¡Gracias por tu respuesta!")
     st.info("Tu opinión es muy valiosa para el equipo.")
+    st.warning("⚠️ Esta ventana se cerrará automáticamente en 5 segundos...")
+    
+    # Inyectar JavaScript para cerrar la ventana
+    st.markdown(close_window_script(), unsafe_allow_html=True)
+    
+    # Pequeña espera para que el usuario vea el mensaje
+    time.sleep(5)
     st.stop()
 
 # Mostrar el formulario
 st.markdown("Selecciona una calificación del **1 al 5** para cada pregunta:")
 
-# Formulario sin clear_on_submit
+# Formulario sin clear_on_submit para mantener las respuestas visibles
 with st.form("encuesta_form"):
     respuestas = []
     for i, q in enumerate(preguntas, start=1):
@@ -154,11 +157,12 @@ if submit_btn:
     # Mostrar mensaje de agradecimiento inmediatamente
     st.success("🎉 ¡Gracias por tu respuesta!")
     st.info("Tu opinión es muy valiosa para el equipo.")
+    st.warning("⚠️ Esta ventana se cerrará automáticamente en 5 segundos...")
     
     # Guardar en Google Sheets en segundo plano
     with st.spinner("Guardando tu respuesta..."):
         try:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = datetime.now(ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d %H:%M:%S")
             
             # Guardar en Google Sheets: timestamp, respuestas, device_id
             row_data = [timestamp] + respuestas + [device_id]
@@ -167,7 +171,13 @@ if submit_btn:
         except Exception as e:
             st.error("❌ No se pudo guardar la respuesta, pero hemos registrado tu participación.")
     
-    # Pequeña pausa para que el usuario vea el mensaje antes del rerun
-    import time
-    time.sleep(1)
+    # Inyectar JavaScript para cerrar la ventana
+    st.markdown(close_window_script(), unsafe_allow_html=True)
+    
+    # Forzar rerun para asegurar que se muestre el estado final
     st.rerun()
+
+# Información de debug (opcional - puedes eliminar esto)
+with st.expander("🔍 Información de diagnóstico"):
+    st.write(f"Device ID: {device_id}")
+    st.write(f"Estado enviado: {st.session_state.submitted}")
