@@ -4,13 +4,11 @@ Created on Thu Oct 23 13:04:07 2025
 
 @author: rccorreall
 """
-
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import ssl
-import time
 
 # === Config página / estilo ===
 st.set_page_config(page_title="Encuesta BEPENSA", layout="centered")
@@ -25,9 +23,9 @@ st.markdown(
     """, unsafe_allow_html=True
 )
 
-# Logo (opcional - pon logo.png en el repo)
+# Logo (opcional)
 try:
-    st.image("logo.png", width=350)
+    st.image("logo.png", width=140)
 except:
     pass
 
@@ -35,16 +33,12 @@ st.title("🧠 Encuesta de Innovación - BEPENSA")
 st.write("Selecciona una calificación del **1 al 5** para cada pregunta:")
 
 # === SSL BYPASS (para entornos con certificados self-signed) ===
-# WARNING: esto evita la verificación de certificados; usar solo si es necesario en tu red.
 ssl._create_default_https_context = ssl._create_unverified_context
 
 # === Conexión a Google Sheets usando service account desde st.secrets ===
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = None
-client = None
-sheet = None
 SHEET_NAME = "Encuesta_innovacion"
-WORKSHEET_NAME = "Hoja 1"   # usa el nombre exacto de la pestaña
+WORKSHEET_NAME = "Hoja 1"
 
 try:
     creds = Credentials.from_service_account_info(st.secrets["google_service_account"], scopes=scope)
@@ -64,29 +58,30 @@ preguntas = [
     "¿Se evidencia un trabajo colaborativo entre distintas áreas y un impacto positivo en las personas o cultura organizacional?"
 ]
 
-# Estado para evitar reenvío
+# === Estado para controlar si ya se envió ===
 if "submitted" not in st.session_state:
     st.session_state.submitted = False
 
+# === Mostrar formulario solo si no se ha enviado ===
 if not st.session_state.submitted:
-    # Mostrar cada pregunta con radio horizontal
     respuestas = []
     for i, q in enumerate(preguntas, start=1):
         r = st.radio(f"{i}. {q}", options=[1, 2, 3, 4, 5], index=2, horizontal=True, key=f"p{i}")
         respuestas.append(r)
 
     if st.button("Enviar respuesta ✅", use_container_width=True):
-        # Guardar en Google Sheets (agregar timestamp + respuestas)
         try:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             sheet.append_row([timestamp] + respuestas)
             st.session_state.submitted = True
-            st.success("🎉 ¡Gracias por tu respuesta!")
         except Exception as e:
             st.error("No se pudo guardar la respuesta. Revisa permisos y conexión.")
             st.write(e)
-else:
+
+# === Mensaje de agradecimiento (si ya se envió) ===
+if st.session_state.submitted:
     st.success("🎉 ¡Gracias por tu respuesta!")
     st.info("Tu opinión es muy valiosa para el equipo.")
+
 
 
