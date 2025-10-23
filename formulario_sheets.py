@@ -24,12 +24,11 @@ except:
     pass
 
 st.title("🧠 Encuesta de Innovación - BEPENSA")
-st.write("Selecciona una calificación del **1 al 5** para cada pregunta:")
 
-# === SSL BYPASS (para entornos con certificados self-signed) ===
+# === SSL BYPASS (para entornos corporativos con certificados self-signed) ===
 ssl._create_default_https_context = ssl._create_unverified_context
 
-# === Conexión a Google Sheets usando service account desde st.secrets ===
+# === Conexión a Google Sheets ===
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 SHEET_NAME = "Encuesta_innovacion"
 WORKSHEET_NAME = "Hoja 1"
@@ -56,11 +55,17 @@ preguntas = [
 if "submitted" not in st.session_state:
     st.session_state.submitted = False
 
-# === Mostrar formulario solo si no se ha enviado ===
-if not st.session_state.submitted:
+# === Renderizar según estado ===
+if st.session_state.submitted:
+    st.success("🎉 ¡Gracias por tu respuesta!")
+    st.info("Tu opinión es muy valiosa para el equipo.")
+else:
+    st.write("Selecciona una calificación del **1 al 5** para cada pregunta:")
     respuestas = []
+
+    # Usamos keys únicas para evitar conflicto de widget
     for i, q in enumerate(preguntas, start=1):
-        r = st.radio(f"{i}. {q}", options=[1, 2, 3, 4, 5], index=2, horizontal=True, key=f"p{i}")
+        r = st.radio(f"{i}. {q}", options=[1, 2, 3, 4, 5], index=2, horizontal=True, key=f"radio_{i}")
         respuestas.append(r)
 
     if st.button("Enviar respuesta ✅", use_container_width=True):
@@ -68,11 +73,8 @@ if not st.session_state.submitted:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             sheet.append_row([timestamp] + respuestas)
             st.session_state.submitted = True
+            # Forzamos rerun para actualizar la vista inmediatamente
+            st.experimental_rerun()
         except Exception as e:
             st.error("No se pudo guardar la respuesta. Revisa permisos y conexión.")
             st.write(e)
-
-# === Mensaje de agradecimiento (si ya se envió) ===
-if st.session_state.submitted:
-    st.success("🎉 ¡Gracias por tu respuesta!")
-    st.info("Tu opinión es muy valiosa para el equipo.")
