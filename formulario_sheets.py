@@ -94,18 +94,17 @@ def get_device_id():
         return f"fallback_{int(time.time())}"
 
 # === VERIFICAR SI YA VOTÓ ===
-def has_already_voted(device_id, project_id=None):
-    """Verifica si este dispositivo ya votó para este proyecto"""
+def has_already_voted(device_id):
+    """Verifica si este dispositivo ya votó"""
     try:
         # Obtener todos los registros
         records = sheet.get_all_records()
         
         # Buscar si este dispositivo ya votó
         for record in records:
-            # Asumiendo que la columna 7 es device_id y columna 8 es project_id
-            if len(record) >= 8:
-                if record[6] == device_id and (project_id is None or record[7] == project_id):
-                    return True
+            # Asumiendo que device_id está en la columna 7 (índice 6)
+            if len(record) >= 7 and record[6] == device_id:
+                return True
         return False
     except Exception as e:
         st.error(f"Error verificando votos previos: {e}")
@@ -117,25 +116,13 @@ if "submitted" not in st.session_state:
 if "device_id" not in st.session_state:
     st.session_state.device_id = get_device_id()
 
-# === SELECTOR DE PROYECTO ===
-st.subheader("Selecciona el proyecto a evaluar")
-proyectos = [
-    "Proyecto A - Sistema de Gestión Inteligente",
-    "Proyecto B - Plataforma Digital Clientes", 
-    "Proyecto C - Optimización Logística",
-    "Proyecto D - Sustentabilidad y Medio Ambiente",
-    "Proyecto E - Innovación en Experiencia Cliente"
-]
+# Project ID fijo (puedes cambiarlo para cada proyecto diferente)
+PROJECT_ID = "proyecto_innovacion_2024"
 
-proyecto_seleccionado = st.selectbox("Proyecto:", proyectos, key="proyecto")
-
-# Obtener ID único del proyecto
-project_id = proyectos.index(proyecto_seleccionado)
-
-# Verificar si ya votó para este proyecto
-if has_already_voted(st.session_state.device_id, project_id):
-    st.error("⚠️ Ya has enviado una evaluación para este proyecto desde este dispositivo.")
-    st.info("Solo se permite una evaluación por proyecto por dispositivo.")
+# Verificar si ya votó
+if has_already_voted(st.session_state.device_id):
+    st.error("⚠️ Ya has enviado una evaluación desde este dispositivo.")
+    st.info("Solo se permite una evaluación por dispositivo.")
     st.stop()
 
 # Si ya enviado, mostrar agradecimiento
@@ -173,7 +160,7 @@ if submit_btn:
             device_id = st.session_state.device_id
             
             # Guardar en Google Sheets: timestamp, respuestas, device_id, project_id
-            row_data = [timestamp] + respuestas + [device_id, project_id, proyecto_seleccionado]
+            row_data = [timestamp] + respuestas + [device_id, PROJECT_ID]
             sheet.append_row(row_data)
             
             # Marcar como enviado
@@ -189,7 +176,7 @@ st.markdown("---")
 with st.expander("ℹ️ Información importante"):
     st.write("""
     **Política de una evaluación por dispositivo:**
-    - Cada dispositivo solo puede enviar una evaluación por proyecto
-    - Esto asegura la integridad y公平idad del proceso
-    - Si necesitas evaluar múltiples proyectos, puedes hacerlo desde el mismo dispositivo
+    - Cada dispositivo solo puede enviar una evaluación
+    - Esto asegura la integridad y parcialidad del proceso
+    - Si necesitas evaluar desde otro dispositivo, puedes hacerlo
     """)
