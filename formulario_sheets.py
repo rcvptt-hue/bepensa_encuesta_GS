@@ -25,7 +25,7 @@ st.markdown(
 
 # Logo (opcional)
 try:
-    st.image("logo.png", width=140)
+    st.image("logo.png", width=350)
 except:
     pass
 
@@ -82,6 +82,7 @@ if not st.session_state.submitted:
 if st.session_state.submitted:
     st.success("🎉 ¡Gracias por tu respuesta!")
     st.info("Tu opinión es muy valiosa para el equipo.")
+
 
 
 
