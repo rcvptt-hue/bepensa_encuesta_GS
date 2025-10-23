@@ -6,6 +6,7 @@ import ssl
 import hashlib
 import time
 from zoneinfo import ZoneInfo
+import random
 
 # === Config página / estilo ===
 st.set_page_config(page_title="Encuesta BEPENSA", layout="centered")
@@ -36,6 +37,14 @@ st.markdown(
         padding: 10px;
         border-radius: 8px;
         margin: 10px 0;
+    }
+    
+    .close-message {
+        background-color: #2E7D32;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #4CAF50;
+        margin: 20px 0;
     }
     </style>
     """, unsafe_allow_html=True
@@ -75,57 +84,61 @@ preguntas = [
     "¿Se evidencia un trabajo colaborativo entre distintas áreas y un impacto positivo en las personas o cultura organizacional?"
 ]
 
-# === ID ÚNICO PERSISTENTE (sobrevive a refresh) ===
-def get_persistent_device_id():
-    """Genera un ID único que persiste incluso después de refresh"""
-    if "persistent_device_id" not in st.session_state:
-        # Intentar crear un ID único y persistente
+# === ID ÚNICO MEJORADO (realmente único por dispositivo) ===
+def get_unique_device_id():
+    """Genera un ID verdaderamente único por dispositivo/sesión"""
+    if "unique_device_id" not in st.session_state:
         try:
-            # Usar una combinación de información disponible + timestamp
+            # Combinar múltiples fuentes para mayor unicidad
             user_agent = st.experimental_user.user_agent if hasattr(st.experimental_user, 'user_agent') else ""
             ip = st.experimental_user.ip if hasattr(st.experimental_user, 'ip') else ""
             
-            # Crear una semilla única
-            seed = f"{user_agent}_{ip}_{int(time.time() / 3600)}"  # Cambia cada hora para evitar conflicts
-            device_id = hashlib.md5(seed.encode()).hexdigest()[:12]
+            # Agregar timestamp de alta precisión y número aleatorio
+            high_precision_time = time.time_ns()
+            random_component = random.randint(100000, 999999)
             
-            st.session_state.persistent_device_id = f"device_{device_id}"
-        except:
-            # Fallback más simple
-            st.session_state.persistent_device_id = f"device_{int(time.time())}"
+            # Crear una semilla más única
+            seed = f"{user_agent}_{ip}_{high_precision_time}_{random_component}"
+            
+            # Usar SHA256 para mayor distribución
+            device_id = hashlib.sha256(seed.encode()).hexdigest()[:16]
+            st.session_state.unique_device_id = f"dev_{device_id}"
+            
+        except Exception as e:
+            # Fallback con UUID conceptual
+            fallback_seed = f"{time.time_ns()}_{random.randint(100000, 999999)}"
+            device_id = hashlib.md5(fallback_seed.encode()).hexdigest()[:12]
+            st.session_state.unique_device_id = f"dev_{device_id}"
     
-    return st.session_state.persistent_device_id
-
-# === JAVASCRIPT PARA CERRAR VENTANA ===
-def close_window_script():
-    """Inyecta JavaScript para cerrar la ventana después de 5 segundos"""
-    return """
-    <script>
-    setTimeout(function() {
-        window.open('', '_self', '');
-        window.close();
-    }, 5000);
-    </script>
-    """
+    return st.session_state.unique_device_id
 
 # Estado de la aplicación
 if "submitted" not in st.session_state:
     st.session_state.submitted = False
 
-# Obtener device ID persistente
-device_id = get_persistent_device_id()
+# Obtener device ID mejorado
+device_id = get_unique_device_id()
 
-# Si ya enviado, mostrar agradecimiento y programar cierre
+# Si ya enviado, mostrar agradecimiento y mensaje de cierre
 if st.session_state.submitted:
     st.success("🎉 ¡Gracias por tu respuesta!")
     st.info("Tu opinión es muy valiosa para el equipo.")
-    st.warning("⚠️ Esta ventana se cerrará automáticamente en 5 segundos...")
     
-    # Inyectar JavaScript para cerrar la ventana
-    st.markdown(close_window_script(), unsafe_allow_html=True)
+    # Mensaje para cerrar manualmente con mejor estilo
+    st.markdown(
+        """
+        <div class="close-message">
+        <h3>✅ Encuesta completada</h3>
+        <p>Puedes cerrar esta ventana ahora. ¡Gracias por participar!</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
     
-    # Pequeña espera para que el usuario vea el mensaje
-    time.sleep(5)
+    # Botón de cierre (simbólico - no funciona en todos los navegadores)
+    if st.button("Cerrar Ventana", type="primary"):
+        st.info("Por favor, cierra esta pestaña manualmente en tu navegador")
+    
     st.stop()
 
 # Mostrar el formulario
@@ -157,7 +170,6 @@ if submit_btn:
     # Mostrar mensaje de agradecimiento inmediatamente
     st.success("🎉 ¡Gracias por tu respuesta!")
     st.info("Tu opinión es muy valiosa para el equipo.")
-    st.warning("⚠️ Esta ventana se cerrará automáticamente en 5 segundos...")
     
     # Guardar en Google Sheets en segundo plano
     with st.spinner("Guardando tu respuesta..."):
@@ -168,16 +180,32 @@ if submit_btn:
             row_data = [timestamp] + respuestas + [device_id]
             sheet.append_row(row_data)
             
+            # Mensaje de éxito
+            st.success("✅ Respuesta guardada exitosamente")
+            
         except Exception as e:
-            st.error("❌ No se pudo guardar la respuesta, pero hemos registrado tu participación.")
+            st.error("❌ No se pudo guardar la respuesta en el sistema, pero hemos registrado tu participación.")
     
-    # Inyectar JavaScript para cerrar la ventana
-    st.markdown(close_window_script(), unsafe_allow_html=True)
+    # Mensaje para cerrar manualmente
+    st.markdown(
+        """
+        <div class="close-message">
+        <h3>✅ Encuesta completada</h3>
+        <p>Puedes cerrar esta ventana ahora. ¡Gracias por participar!</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    
+    # Botón de cierre simbólico
+    st.button("Cerrar Ventana", type="primary")
     
     # Forzar rerun para asegurar que se muestre el estado final
     st.rerun()
 
-# Información de debug (opcional - puedes eliminar esto)
-with st.expander("🔍 Información de diagnóstico"):
-    st.write(f"Device ID: {device_id}")
-    st.write(f"Estado enviado: {st.session_state.submitted}")
+# Información de diagnóstico (opcional - puedes comentar o eliminar esto)
+with st.expander("🔍 Información de diagnóstico (solo para pruebas)"):
+    st.write(f"**Device ID:** {device_id}")
+    st.write(f"**Estado enviado:** {st.session_state.submitted}")
+    st.write(f"**User Agent:** {st.experimental_user.user_agent if hasattr(st.experimental_user, 'user_agent') else 'No disponible'}")
+    st.write(f"**IP:** {st.experimental_user.ip if hasattr(st.experimental_user, 'ip') else 'No disponible'}")
