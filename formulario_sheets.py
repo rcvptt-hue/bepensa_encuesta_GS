@@ -27,7 +27,7 @@ st.markdown(
 
 # Logo (opcional - pon logo.png en el repo)
 try:
-    st.image("logo.png", width=140)
+    st.image("logo.png", width=350)
 except:
     pass
 
@@ -88,4 +88,5 @@ if not st.session_state.submitted:
 else:
     st.success("🎉 ¡Gracias por tu respuesta!")
     st.info("Tu opinión es muy valiosa para el equipo.")
+
 
