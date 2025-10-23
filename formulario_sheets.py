@@ -40,11 +40,22 @@ st.markdown(
     }
     
     .close-message {
-        background-color: #2E7D32;
-        padding: 15px;
+        background-color: #1B5E20;
+        padding: 20px;
         border-radius: 10px;
-        border-left: 5px solid #4CAF50;
-        margin: 20px 0;
+        border-left: 6px solid #4CAF50;
+        margin: 25px 0;
+        text-align: center;
+    }
+    
+    .close-message h3 {
+        color: #4CAF50 !important;
+        margin-bottom: 10px;
+    }
+    
+    .close-message p {
+        font-size: 18px;
+        margin-bottom: 5px;
     }
     </style>
     """, unsafe_allow_html=True
@@ -84,60 +95,49 @@ preguntas = [
     "¿Se evidencia un trabajo colaborativo entre distintas áreas y un impacto positivo en las personas o cultura organizacional?"
 ]
 
-# === ID ÚNICO MEJORADO (realmente único por dispositivo) ===
-def get_unique_device_id():
-    """Genera un ID verdaderamente único por dispositivo/sesión"""
-    if "unique_device_id" not in st.session_state:
+# === ID ÚNICO PERSISTENTE (no cambia con refresh) ===
+def get_persistent_device_id():
+    """Genera un ID único que persiste incluso después de refresh"""
+    if "persistent_device_id" not in st.session_state:
         try:
-            # Combinar múltiples fuentes para mayor unicidad
+            # Usar información más estable para el ID base
             user_agent = st.experimental_user.user_agent if hasattr(st.experimental_user, 'user_agent') else ""
-            ip = st.experimental_user.ip if hasattr(st.experimental_user, 'ip') else ""
             
-            # Agregar timestamp de alta precisión y número aleatorio
-            high_precision_time = time.time_ns()
-            random_component = random.randint(100000, 999999)
-            
-            # Crear una semilla más única
-            seed = f"{user_agent}_{ip}_{high_precision_time}_{random_component}"
-            
-            # Usar SHA256 para mayor distribución
+            # Crear una semilla más estable (sin componentes que cambien con cada refresh)
+            seed = f"{user_agent}"
             device_id = hashlib.sha256(seed.encode()).hexdigest()[:16]
-            st.session_state.unique_device_id = f"dev_{device_id}"
+            
+            st.session_state.persistent_device_id = f"dev_{device_id}"
             
         except Exception as e:
-            # Fallback con UUID conceptual
-            fallback_seed = f"{time.time_ns()}_{random.randint(100000, 999999)}"
-            device_id = hashlib.md5(fallback_seed.encode()).hexdigest()[:12]
-            st.session_state.unique_device_id = f"dev_{device_id}"
+            # Fallback estable
+            st.session_state.persistent_device_id = f"dev_fallback_{int(time.time())}"
     
-    return st.session_state.unique_device_id
+    return st.session_state.persistent_device_id
 
 # Estado de la aplicación
 if "submitted" not in st.session_state:
     st.session_state.submitted = False
 
-# Obtener device ID mejorado
-device_id = get_unique_device_id()
+# Obtener device ID persistente
+device_id = get_persistent_device_id()
 
 # Si ya enviado, mostrar agradecimiento y mensaje de cierre
 if st.session_state.submitted:
     st.success("🎉 ¡Gracias por tu respuesta!")
     st.info("Tu opinión es muy valiosa para el equipo.")
     
-    # Mensaje para cerrar manualmente con mejor estilo
+    # Mensaje mejorado para cerrar manualmente con más énfasis
     st.markdown(
         """
         <div class="close-message">
-        <h3>✅ Encuesta completada</h3>
-        <p>Puedes cerrar esta ventana ahora. ¡Gracias por participar!</p>
+        <h3>🏁 ENCUESTA COMPLETADA</h3>
+        <p><strong>Por favor, cierra esta ventana/pestaña de tu navegador</strong></p>
+        <p>¡Gracias por tu participación!</p>
         </div>
         """, 
         unsafe_allow_html=True
     )
-    
-    # Botón de cierre (simbólico - no funciona en todos los navegadores)
-    if st.button("Cerrar Ventana", type="primary"):
-        st.info("Por favor, cierra esta pestaña manualmente en tu navegador")
     
     st.stop()
 
@@ -186,26 +186,17 @@ if submit_btn:
         except Exception as e:
             st.error("❌ No se pudo guardar la respuesta en el sistema, pero hemos registrado tu participación.")
     
-    # Mensaje para cerrar manualmente
+    # Mensaje mejorado para cerrar manualmente con más énfasis
     st.markdown(
         """
         <div class="close-message">
-        <h3>✅ Encuesta completada</h3>
-        <p>Puedes cerrar esta ventana ahora. ¡Gracias por participar!</p>
+        <h3>🏁 ENCUESTA COMPLETADA</h3>
+        <p><strong>Por favor, cierra esta ventana/pestaña de tu navegador</strong></p>
+        <p>¡Gracias por tu participación!</p>
         </div>
         """, 
         unsafe_allow_html=True
     )
     
-    # Botón de cierre simbólico
-    st.button("Cerrar Ventana", type="primary")
-    
     # Forzar rerun para asegurar que se muestre el estado final
     st.rerun()
-
-# Información de diagnóstico (opcional - puedes comentar o eliminar esto)
-with st.expander("🔍 Información de diagnóstico (solo para pruebas)"):
-    st.write(f"**Device ID:** {device_id}")
-    st.write(f"**Estado enviado:** {st.session_state.submitted}")
-    st.write(f"**User Agent:** {st.experimental_user.user_agent if hasattr(st.experimental_user, 'user_agent') else 'No disponible'}")
-    st.write(f"**IP:** {st.experimental_user.ip if hasattr(st.experimental_user, 'ip') else 'No disponible'}")
