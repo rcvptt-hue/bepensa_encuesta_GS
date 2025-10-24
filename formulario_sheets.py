@@ -104,18 +104,44 @@ preguntas = [
     "¿Se evidencia un trabajo colaborativo entre distintas áreas y un impacto positivo en las personas o cultura organizacional?"
 ]
 
-# === ID ÚNICO MEJORADO (sin mostrar al usuario) ===
-def get_session_device_id():
-    """Genera un ID único por sesión que persiste hasta cerrar la ventana"""
-    if "session_device_id" not in st.session_state:
-        # Generar un UUID único para esta sesión
-        session_uuid = str(uuid.uuid4())
+# === MÉTODO ÓPTIMO PARA ID DE USUARIO ===
+def get_optimal_user_id():
+    """
+    ID óptimo que combina persistencia, unicidad y información útil
+    Formato: Plataforma + HashNavegador + Sesión + Tiempo
+    Ejemplo: "Dabcd_1a2b3c_5678"
+    - D = Desktop, M = Mobile, T = Tablet
+    - abcd = Hash del navegador (4 caracteres)
+    - 1a2b3c = ID de sesión (6 caracteres)
+    - 5678 = Timestamp (4 dígitos)
+    """
+    if "optimal_user_id" not in st.session_state:
+        # Componente de sesión (6 caracteres)
+        session_part = uuid.uuid4().hex[:6]
         
-        # Crear un ID de sesión simple pero único
-        session_id = f"ses_{session_uuid[:12]}"
-        st.session_state.session_device_id = session_id
+        # Componente de navegador (4 caracteres)
+        try:
+            user_agent = st.experimental_user.user_agent or "unknown"
+            browser_part = hashlib.md5(user_agent.encode()).hexdigest()[:4]
+        except:
+            browser_part = "unk"
+        
+        # Componente temporal (4 dígitos)
+        time_part = str(int(time.time()))[-4:]
+        
+        # Detección de plataforma
+        user_agent_lower = user_agent.lower()
+        if any(word in user_agent_lower for word in ['mobile', 'android', 'iphone']):
+            platform = "M"
+        elif any(word in user_agent_lower for word in ['tablet', 'ipad']):
+            platform = "T"
+        else:
+            platform = "D"
+        
+        optimal_id = f"{platform}{browser_part}_{session_part}_{time_part}"
+        st.session_state.optimal_user_id = optimal_id
     
-    return st.session_state.session_device_id
+    return st.session_state.optimal_user_id
 
 # Estado de la aplicación
 if "submitted" not in st.session_state:
@@ -123,8 +149,8 @@ if "submitted" not in st.session_state:
 if "processing" not in st.session_state:
     st.session_state.processing = False
 
-# Obtener device ID de sesión (no se muestra al usuario)
-device_id = get_session_device_id()
+# Obtener device ID óptimo (no se muestra al usuario)
+user_id = get_optimal_user_id()
 
 # Si ya enviado, mostrar agradecimiento
 if st.session_state.submitted:
@@ -197,8 +223,8 @@ if st.session_state.get('processing', False) and not st.session_state.get('submi
         try:
             timestamp = datetime.now(ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d %H:%M:%S")
             
-            # Guardar en Google Sheets: timestamp, respuestas, device_id
-            row_data = [timestamp] + respuestas + [device_id]
+            # Guardar en Google Sheets: timestamp, respuestas, user_id
+            row_data = [timestamp] + respuestas + [user_id]
             sheet.append_row(row_data)
             
             # Mensaje de éxito
