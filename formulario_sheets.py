@@ -104,7 +104,7 @@ preguntas = [
     "¿Se evidencia un trabajo colaborativo entre distintas áreas y un impacto positivo en las personas o cultura organizacional?"
 ]
 
-# === MÉTODO ÓPTIMO PARA ID DE USUARIO ===
+# === MÉTODO ÓPTIMO CORREGIDO PARA ID DE USUARIO ===
 def get_optimal_user_id():
     """
     ID óptimo que combina persistencia, unicidad y información útil
@@ -116,27 +116,35 @@ def get_optimal_user_id():
     - 5678 = Timestamp (4 dígitos)
     """
     if "optimal_user_id" not in st.session_state:
+        # Inicializar variables con valores por defecto
+        user_agent = "unknown"
+        browser_part = "unk"
+        platform = "D"  # Por defecto asumimos Desktop
+        
+        try:
+            # Intentar obtener información del usuario
+            user_agent = st.experimental_user.user_agent or "unknown"
+            browser_part = hashlib.md5(user_agent.encode()).hexdigest()[:4]
+            
+            # Detección de plataforma solo si tenemos user_agent
+            user_agent_lower = user_agent.lower()
+            if any(word in user_agent_lower for word in ['mobile', 'android', 'iphone']):
+                platform = "M"
+            elif any(word in user_agent_lower for word in ['tablet', 'ipad']):
+                platform = "T"
+            else:
+                platform = "D"
+                
+        except Exception as e:
+            # Si hay algún error, usar valores por defecto
+            browser_part = "unk"
+            platform = "D"
+        
         # Componente de sesión (6 caracteres)
         session_part = uuid.uuid4().hex[:6]
         
-        # Componente de navegador (4 caracteres)
-        try:
-            user_agent = st.experimental_user.user_agent or "unknown"
-            browser_part = hashlib.md5(user_agent.encode()).hexdigest()[:4]
-        except:
-            browser_part = "unk"
-        
         # Componente temporal (4 dígitos)
         time_part = str(int(time.time()))[-4:]
-        
-        # Detección de plataforma
-        user_agent_lower = user_agent.lower()
-        if any(word in user_agent_lower for word in ['mobile', 'android', 'iphone']):
-            platform = "M"
-        elif any(word in user_agent_lower for word in ['tablet', 'ipad']):
-            platform = "T"
-        else:
-            platform = "D"
         
         optimal_id = f"{platform}{browser_part}_{session_part}_{time_part}"
         st.session_state.optimal_user_id = optimal_id
